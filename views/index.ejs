@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Muyu: Invoice Generator</title>
+	<link rel="stylesheet" href="/css/main.css">
+	<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+	<script>
+		function getCookie(name) {
+			const row = document.cookie
+				.split("; ")
+				.find((part) => part.startsWith(`${name}=`));
+			return row ? decodeURIComponent(row.slice(name.length + 1)) : "";
+		}
+
+		function setCookie(name, value, days = 30) {
+			const expires = new Date(Date.now() + days * 864e5).toUTCString();
+			document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+		}
+
+		function wantsEmailChange() {
+			return new URLSearchParams(window.location.search).get("changeEmail") === "1";
+		}
+
+		function invoiceForm(profile) {
+			return {
+				companyName: profile.companyName || "",
+				companyDetails: profile.companyDetails || "",
+				customerName: "",
+				customerDetails: "",
+				taxRate: profile.taxRate || "",
+				expenses: [{ id: 1, description: "", cost: "" }],
+				nextId: 2,
+				addExpense() {
+					this.expenses.push({ id: this.nextId++, description: "", cost: "" });
+				},
+				removeExpense(id) {
+					if (this.expenses.length > 1) {
+						this.expenses = this.expenses.filter((expense) => expense.id !== id);
+					}
+				},
+				get subtotal() {
+					return this.expenses.reduce((sum, expense) => sum + (parseFloat(expense.cost) || 0), 0);
+				},
+				get taxAmount() {
+					return (this.subtotal * (parseFloat(this.taxRate) || 0)) / 100;
+				},
+				get total() {
+					return this.subtotal + this.taxAmount;
+				},
+			};
+		}
+
+		if (getCookie("user_email") && !wantsEmailChange()) {
+			document.documentElement.classList.add("has-cookie");
+		}
+	</script>
+</head>
+<body
+	x-data="{
+		userEmail: getCookie('user_email'),
+		showModal: !getCookie('user_email') || wantsEmailChange(),
+		email: getCookie('user_email'),
+		submitEmail() {
+			const email = this.email.trim();
+			if (email) {
+				this.email = email;
+				this.userEmail = email;
+				setCookie('user_email', email);
+				this.showModal = false;
+				history.replaceState({}, document.title, location.pathname);
+			}
+		}
+	}"
+	:class="{ locked: showModal }"
+>
+	<dialog
+		id="email-modal"
+		class="modal"
+		aria-labelledby="email-modal-title"
+		aria-describedby="email-modal-description"
+		x-effect="showModal && !$el.open ? $el.showModal() : (!showModal && $el.open ? $el.close() : null)"
+		@cancel.prevent
+		x-cloak
+	>
+			<form class="dialog" @submit.prevent="submitEmail">
+				<h1 id="email-modal-title">Start with your email</h1>
+				<p id="email-modal-description">Used for settings and history.</p>
+				<label for="userEmail">Email</label>
+				<input id="userEmail" type="email" x-model="email" placeholder="your@email.com" autocomplete="email" inputmode="email" autofocus required>
+				<button type="submit">Continue</button>
+			</form>
+	</dialog>
+
+	<div
+		class="shell"
+		x-data='invoiceForm(<%= JSON.stringify({
+			companyName: profile ? profile.company_name : "",
+			companyDetails: profile ? profile.company_details : "",
+			taxRate: profile ? profile.default_tax_rate : ""
+		}) %>)'
+	>
+		<aside class="sidebar">
+			<header>
+				Muyu: Invoice Generator
+			</header>
+			<nav>
+				<a class="active" aria-current="page" href="/">Create Invoice</a>
+				<a href="/past-invoices">Past Invoices</a>
+				<a href="/settings">Settings</a>
+			</nav>
+			<footer>
+				<span x-text="userEmail ? `Logged in as: ${userEmail}` : 'No email selected'"></span>
+				<a class="sidebar-action" href="/?changeEmail=1">Change email</a>
+			</footer>
+		</aside>
+
+		<main>
+			<section class="page-header">
+				<div>
+					<h1>Create invoice</h1>
+				</div>
+			</section>
+
+			<form class="workspace-grid" action="/generate" method="POST">
+				<div class="form-stack">
+					<fieldset class="panel">
+						<legend>Business</legend>
+						<div class="field-grid">
+							<label for="companyName">
+								Business Name
+								<input id="companyName" name="companyName" x-model="companyName" placeholder="Summit Contracting" required>
+							</label>
+
+							<label class="wide" for="companyDetails">
+								Details
+								<textarea id="companyDetails" name="companyDetails" x-model="companyDetails" placeholder="Address, contact details, tax ID" required></textarea>
+							</label>
+						</div>
+					</fieldset>
+
+					<fieldset class="panel">
+						<legend>Customer</legend>
+						<div class="field-grid">
+							<label for="customerName">
+								Customer Name
+								<input id="customerName" name="customerName" x-model="customerName" placeholder="Northwind Builders">
+							</label>
+
+							<label class="wide" for="customerDetails">
+								Details
+								<textarea id="customerDetails" name="customerDetails" x-model="customerDetails" placeholder="Address, contact, PO number"></textarea>
+							</label>
+						</div>
+					</fieldset>
+
+					<fieldset class="panel">
+						<legend>Line Items</legend>
+						<div class="split">
+							<button type="button" class="secondary" @click="addExpense">Add Item</button>
+						</div>
+
+						<div class="expense-list">
+							<template x-for="(expense, index) in expenses" :key="expense.id">
+								<div class="expense-row">
+									<label>
+										Description
+										<input type="text" :name="'expenses[' + index + '][description]'" x-model="expense.description" placeholder="Labor - fixture install" required>
+									</label>
+									<label>
+										Cost
+										<input type="number" step="0.01" min="0" :name="'expenses[' + index + '][cost]'" x-model="expense.cost" placeholder="0.00" required>
+									</label>
+									<button type="button" class="danger" @click="removeExpense(expense.id)" :disabled="expenses.length === 1">Remove</button>
+								</div>
+							</template>
+						</div>
+					</fieldset>
+
+					<fieldset class="panel">
+						<legend>Tax</legend>
+						<label class="short" for="taxRate">
+							Tax Rate (%)
+							<input id="taxRate" name="taxRate" type="number" step="0.01" min="0" max="100" x-model="taxRate" placeholder="0.00" required>
+						</label>
+					</fieldset>
+				</div>
+
+				<aside class="ledger-panel" aria-label="Invoice total">
+					<h2>Totals</h2>
+					<section class="summary">
+						<p><span>Subtotal</span><strong x-text="'$' + subtotal.toFixed(2)">$0.00</strong></p>
+						<p><span x-text="'Tax (' + (taxRate || 0) + '%)'">Tax (0%)</span><strong x-text="'$' + taxAmount.toFixed(2)">$0.00</strong></p>
+						<p class="total"><span>Total</span><strong x-text="'$' + total.toFixed(2)">$0.00</strong></p>
+					</section>
+
+					<div class="ledger-actions">
+						<button type="submit">Generate</button>
+					</div>
+				</aside>
+			</form>
+		</main>
+	</div>
+</body>
+</html>

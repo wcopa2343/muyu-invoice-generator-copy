@@ -1,0 +1,36 @@
+[tools]
+node = "24.16.0"
+trivy = "0.71.0"
+packer = "1.10.3"
+
+[env]
+DATABASE_URL = "postgres://invoice_user:invoice_pass@localhost:5432/invoice_db"
+PORT = "3000"
+
+[tasks.start]
+description = "Start the application"
+run = "npm start"
+
+[tasks.dev]
+description = "Start the application with Node watch mode"
+run = "npm run dev"
+
+[tasks.test]
+description = "Run all tests and generate coverage report"
+run = "npm test"
+
+[tasks.test-db]
+description = "Start test database and run tests"
+run = "npm run test:db"
+
+[tasks.lint]
+description = "Check for linting errors and formatting issues using Biome"
+run = "npm run lint"
+
+[tasks.format]
+description = "Automatically fix linting errors and format code using Biome"
+run = "npm run format"
+
+[tasks.scan-dependencies]
+description = "Scan dependencies for vulnerabilities using Trivy"
+run = "trivy fs ."
