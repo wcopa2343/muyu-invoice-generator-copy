@@ -1,0 +1,9 @@
+.github
+provisioning/
+scripts/
+tests/
+.gitignore
+*.md
+mise.toml
+docker-compose.yml
+node_modules
